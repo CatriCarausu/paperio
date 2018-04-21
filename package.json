@@ -1,0 +1,27 @@
+{
+  "name": "paperio",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "express": "^4.16.3",
+    "node-uuid": "^1.4.8",
+    "nodemon": "^1.17.3",
+    "p2": "^0.7.1",
+    "socket.io": "^2.1.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CatriCarausu/paperio.git"
+  },
+  "author": "catrinel carausu",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/CatriCarausu/paperio/issues"
+  },
+  "homepage": "https://github.com/CatriCarausu/paperio#readme"
+}
