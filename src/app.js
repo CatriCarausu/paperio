@@ -17,6 +17,8 @@ console.log("Server started.");
 
 var player_lst = [];
 var colors = [];
+var backgroundColor = 0x00001a;
+// 0xb3ff66;
 
 //needed for physics update 
 var startTime = (new Date).getTime();
@@ -29,25 +31,46 @@ var world = new p2.World({
   gravity : [0,0]
 });
 
+var land_object = function (startx, starty, color, owner_id, id) {
+	this.x = startx;
+	this.y = starty;
+	this.color = color;
+	this.owner_id = owner_id; 
+	this.id = id; 
+}
+
 //create a game class to store basic game data
 var game_setup = function() {
-	//The constant number of foods in the game
-	this.food_num = 100; 
-	//food object list
-	this.food_pickup = [];
+	this.land = generateLandSquares();
 	//game size height
-	this.canvas_height = 1500;
+	this.canvas_height = 1275;
 	//game size width
-	this.canvas_width = 730; 
+	this.canvas_width = 720; 
 }
 
 // createa a new game instance
 var game_instance = new game_setup();
 
+function generateLandSquares() {
+	var i, j;
+	var land = [];
+
+	for (i = 15; i < 720; i += 30) {
+		for (j = 15; j < 1275; j += 30) {
+			var unique_id = unique.v4(); 
+			var land_obj = new land_object(j, i, backgroundColor, null, unique_id);
+			land.push(land_obj);
+		}
+	}
+
+	return land;
+}
+
 //a player class in the server
 var Player = function (startX, startY) {
 	this.id;
 	this.color = getRndColor();
+	this.trailColor = trailColor(this.color);
 	this.x = startX;
 	this.y = startY;
 	this.speed = 500;
@@ -55,14 +78,7 @@ var Player = function (startX, startY) {
 	this.sendData = true;
 	this.size = 30; 
 	this.dead = false;
-}
-
-var foodpickup = function (max_x, max_y, type, id) {
-	this.x = getRndInteger(10, max_x - 10) ;
-	this.y = getRndInteger(10, max_y - 10);
-	this.type = type; 
-	this.id = id; 
-	this.powerup; 
+	this.trail = [];
 }
 
 //We call physics handler 60fps. The physics is calculated here. 
@@ -78,47 +94,177 @@ function physics_hanlder() {
 }
 
 function heartbeat () {
-	
-	//the number of food that needs to be generated 
-	//in this demo, we keep the food always at 100
-	var food_generatenum = game_instance.food_num - game_instance.food_pickup.length; 
-	
-	//add the food 
-	addfood(food_generatenum);
-	//physics stepping. We moved this into heartbeat
 	physics_hanlder();
 }
 
-function addfood(n) {
+function addLandForPlayer(player, lastLand) {
+	var i, j; 
+
+	completeBox(player, lastLand);
+
+	player.trail.forEach( land => {
+		var land_item = game_instance.land.find(l => land.id === l.id);
+		
+		if (land_item.owner_id && land_item.owner_id === player.id) {
+			return;
+		}
+
+		land_item.x = land.x;
+		land_item.y = land.y;
+		land_item.owner_id = player.id;
+		land_item.color = player.color;
+
+		//set the food data back to client
+		io.emit("item_update", land_item); 
+
+		completeRowAndCol(land_item, player, lastLand);
+	});
+
+	player.trail = [];
+}
+
+function completeBox (currentLand, player, lastLand) {
+	var lastSameX = findLastWithSameX(player, currentLand.x, currentLand.y, lastLand);
+	var lastSameY = findLastWithSameY(player, currentLand.x, currentLand.y, lastLand);
+	var start, end;
+
+	if (lastSameX) {
+		start = currentLand.y < lastSameX.y ? currentLand.y : lastSameX.y;
+		end = currentLand.y > lastSameX.y ? currentLand.y : lastSameX.y;
+		for (var i = start; i <= end; i+=30) {
+			var land_item = game_instance.land.find(l => l.x === currentLand.x && l.y === i);
+
+			if (land_item.owner_id && land_item.owner_id === player.id) {
+				continue;
+			}
+			
+			land_item.x = currentLand.x;
+			land_item.y = i;
+			land_item.owner_id = player.id;
+			land_item.color = player.color;
+
+			//set the food data back to client
+			io.emit("item_update", land_item); 
+		}
+	}
+
+	if (lastSameY) {
+		start = currentLand.x < lastSameY.x ? currentLand.x : lastSameY.x;
+		end = currentLand.x > lastSameY.x ? currentLand.x : lastSameY.x;
+		for (var i = start; i <= end; i+=30) {
+			var land_item = game_instance.land.find(l => l.y === currentLand.y && l.x === i);
+			
+			if (land_item.owner_id && land_item.owner_id === player.id) {
+				continue;
+			}
 	
-	//return if it is not required to create food 
-	if (n <= 0) {
-		return; 
+			land_item.y = currentLand.y;
+			land_item.x = i;
+			land_item.owner_id = player.id;
+			land_item.color = player.color;
+	
+			//set the food data back to client
+			io.emit("item_update", land_item); 
+		}
 	}
 	
-	//create n number of foods to the game
-	for (var i = 0; i < n; i++) {
-		//create the unique id using node-uuid
-		var unique_id = unique.v4(); 
-		var foodentity = new foodpickup(game_instance.canvas_width, game_instance.canvas_height, 'food', unique_id);
-		game_instance.food_pickup.push(foodentity); 
-		//set the food data back to client
-		io.emit("item_update", foodentity); 
+}
+
+function findLastWithSameX (player, x, y, lastLand) {
+	
+
+	var sameX = game_instance.land.filter(t => t.x === x && t.owner_id === player.id);
+	var max = 100000, i;
+	var land;
+
+	sameX.forEach(s => {
+		if (Math.abs(s.y - y) < max) {
+			land = s;
+			max = s.y;
+		}
+	});
+
+	return land;
+}
+
+function findLastWithSameY (player, x, y, lastLand) {	
+	var sameX = game_instance.land.filter(t => t.y === y && t.owner_id === player.id);
+	var max = 1000000, i;
+	var land;
+
+	sameX.forEach(s => {
+		if (Math.abs(s.x - x) < max) {
+			land = s;
+			max = s.x;
+		}
+	});
+
+	return land;
+}
+
+function generateStartingPosition () {
+	while (true) {
+		var x = getRndInteger(5, 1275/30 - 5);
+		var y = getRndInteger(5, 720/30 - 5);
+
+		var i, j;
+		var available = true;
+		for (i = -1; i <= 1; i++) {
+			for (j = -1; j <= 1; j++) {
+				var land = game_instance.land.find(l => l.x === (x + i)*30 + 15 && l.y === (y + j)*30 + 15);
+
+				if (!land) {
+					continue;
+				}
+
+				if (land.owner_id !== null) {
+					available = false;
+				}
+			}
+		}
+
+		if(available) {
+			return {x: x * 30 + 15, y: y * 30 + 15};
+		}
 	}
 }
 
+function setLandForStarttingPosition (x, y, owner_id, color, ts) {
+	var i, j;
+	
+	for (i = -30; i <= 30; i+=30) {
+		for (j = -30; j <= 30; j+=30) {
+			var land = game_instance.land.find(l => l.x === x + i && l.y === y + j)
+		
+			if (!land) {
+				continue;
+			}
+
+			land.x = x + i;
+			land.y = y + j;
+			land.owner_id = owner_id;
+			land.color = color;
+
+			ts.emit("item_update", land)
+		}
+	}
+}
 
 // when a new player connects, we make a new instance of the player object,
 // and send a new player message to the client. 
 function onNewplayer (data) {
+	var startingPos = generateStartingPosition();
+	
 	//new player instance
-	var newPlayer = new Player(data.x, data.y);
+	var newPlayer = new Player(startingPos.x, startingPos.y);
 	newPlayer.id = this.id;
+
+	setLandForStarttingPosition(startingPos.x, startingPos.y, newPlayer.id, newPlayer.color, this);
 	
 	//create an instance of player body 
 	playerBody = new p2.Body ({
 		mass: 0,
-		position: [0,0],
+		position: [startingPos.x, startingPos.y],
 		fixedRotation: true
 	});
 	
@@ -129,7 +275,7 @@ function onNewplayer (data) {
 	console.log("created new player with id " + this.id);
 	newPlayer.id = this.id; 	
 	
-	this.emit('create_player', {size: newPlayer.size, color: newPlayer.color});
+	this.emit('create_player', {size: newPlayer.size, color: newPlayer.color, x: startingPos.x, y: startingPos.y});
 	
 	//information to be sent to all clients except sender
 	var current_info = {
@@ -155,17 +301,34 @@ function onNewplayer (data) {
 		this.emit("new_enemyPlayer", player_info);
 	}
 	
-	//Tell the client to make foods that are exisiting
-	for (j = 0; j < game_instance.food_pickup.length; j++) {
-		var food_pick = game_instance.food_pickup[j];
-		this.emit('item_update', food_pick); 
-	}
-	
 	//send message to every connected client except the sender
 	this.broadcast.emit('new_enemyPlayer', current_info);
 	
 	player_lst.push(newPlayer); 
 	sortPlayerListByScore();
+}
+
+function onlandPicked(data) {
+	var player = player_lst.find(pl => pl.id === data.player_id);
+	var currentLand = game_instance.land.find(l => l.id === data.id);
+
+	if (!player || !currentLand) {
+		return;
+	}
+
+	if (currentLand.owner_id === data.player_id) {
+		addLandForPlayer(player, currentLand);
+		return;
+	}
+	
+	currentLand.color = trailColor(data.color);
+	player.trail.push(currentLand);
+
+	if (data.ts) {
+		data.ts.emit("item_update", currentLand);
+	} else {
+		this.emit("item_update", currentLand);
+	}
 }
 
 //instead of listening to player positions, we listen to user inputs 
@@ -181,14 +344,36 @@ function onInputFired (data) {
 	if (!movePlayer.sendData) {
 		return;
 	}
+
+	onlandPicked({
+		id: game_instance.land.find(l => l.x === data.pointer_x && l.y === data.pointer_y).id,
+		player_id: movePlayer.id,
+		color: movePlayer.color,
+		ts: this
+	});
 	
 	//every 50ms, we send the data. 
 	setTimeout(function() {movePlayer.sendData = true}, 50);
+
 	//we set sendData to false when we send the data. 
 	movePlayer.sendData = false;
 	
-	movePlayer.x = data.pointer_x; 
-	movePlayer.y = data.pointer_y;
+	var xAdd = 0, yAdd = 0;
+	if (data.direction === 'up') {
+		yAdd = -30;
+	}
+	if (data.direction === 'down') {
+		yAdd = 30;
+	}
+	if (data.direction === 'left') {
+		xAdd = -30;
+	}
+	if (data.direction === 'right') {
+		xAdd = 30;
+	}
+
+	movePlayer.x = data.pointer_x + xAdd; 
+	movePlayer.y = data.pointer_y + yAdd;
 
 	movePlayer.playerBody.position[0] = movePlayer.x;
 	movePlayer.playerBody.position[1] = movePlayer.y;
@@ -251,14 +436,10 @@ function onPlayerCollision (data) {
 	console.log("someone ate someone!!!");
 }
 
-function find_food (id) {
-	for (var i = 0; i < game_instance.food_pickup.length; i++) {
-		if (game_instance.food_pickup[i].id == id) {
-			return game_instance.food_pickup[i]; 
-		}
-	}
+function find_land (id) {
+	var land_item = game_instance.land.find(x => x.id === id);
 	
-	return false;
+	return land_item ? land_item : false;
 }
 
 function sortPlayerListByScore() {
@@ -274,29 +455,12 @@ function sortPlayerListByScore() {
 	io.emit("leader_board", playerListSorted);
 }
 
-function onitemPicked (data) {
-	var movePlayer = find_playerid(this.id); 
-
-	var object = find_food(data.id);	
-	if (!object) {
-		console.log(data);
-		console.log("could not find object");
-		return;
-	}
-	
-	game_instance.food_pickup.splice(game_instance.food_pickup.indexOf(object), 1);
-	sortPlayerListByScore();
-	console.log("item picked");
-
-	io.emit('itemremove', object); 
-	this.emit('item_picked');
-}
-
 function playerKilled (player) {
 	//find the player and remove it.
 	var removePlayer = find_playerid(player.id); 
 		
 	if (removePlayer) {
+		removePlayerLand(player);
 		player_lst.splice(player_lst.indexOf(removePlayer), 1);
 		var index = colors.indexOf(removePlayer.color);
 		colors.splice(index, 1);
@@ -316,6 +480,7 @@ function onClientdisconnect() {
 	var removePlayer = find_playerid(this.id); 
 		
 	if (removePlayer) {
+		removePlayerLand(removePlayer);
 		player_lst.splice(player_lst.indexOf(removePlayer), 1);
 		var index = colors.indexOf(removePlayer.color);
 		colors.splice(index, 1);
@@ -326,7 +491,15 @@ function onClientdisconnect() {
 	sortPlayerListByScore();
 	//send message to every connected client except the sender
 	this.broadcast.emit('remove_player', {id: this.id});
-	
+}
+
+function removePlayerLand (player) {
+	game_instance.land.forEach(land => {
+		if(land.owner_id === player.id || land.color === player.trailColor) {
+			land.owner_id = null;
+			land.color = backgroundColor;
+		}
+	});
 }
 
 // find player by the the unique socket id 
@@ -353,11 +526,30 @@ function getRndColor() {
 	}
 }
 
+function trailColor(color) {
+	percent = 0.5;
+	var f=color;
+	var t=percent<0?0:255;
+	var p=percent<0?percent*-1:percent;
+	var R=f>>16;
+	var G=f>>8&0x00FF;
+	var B=f&0x0000FF;
+	var lighterColor = parseInt((0x1000000+(Math.round((t-R)*p)+R)*0x10000+(Math.round((t-G)*p)+G)*0x100+(Math.round((t-B)*p)+B)).toString(16).slice(1), 16);
+    return lighterColor;
+}
+
+function emitInitialLand (ts) {
+	game_instance.land.forEach(land => {
+		ts.emit("item_update", land);
+	});
+}
+
  // io connection 
 var io = require('socket.io')(serv,{});
 
 io.sockets.on('connection', function(socket){
 	console.log("socket connected"); 
+	emitInitialLand(this);
 	
 	// listen for disconnection; 
 	socket.on('disconnect', onClientdisconnect); 
@@ -370,6 +562,6 @@ io.sockets.on('connection', function(socket){
 	
 	socket.on("player_collision", onPlayerCollision);
 	
-	//listen if player got items 
-	socket.on('item_picked', onitemPicked);
+	//listen if player got land 
+	socket.on('land_picked', onlandPicked);
 });

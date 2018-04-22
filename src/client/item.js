@@ -1,61 +1,51 @@
-//the food list
-var food_pickup = [];
+var land = [];
 
 // search through food list to find the food object
 function finditembyid (id) {
-	
-	for (var i = 0; i < food_pickup.length; i++) {
-
-		if (food_pickup[i].id == id) {
-			return food_pickup[i]; 
-		}
-	}
-	
-	return false; 
+	var landPiece = land.find(x => x.id === id);
+	return landPiece ? landPiece : false; 
 }
 
 // function called when new food is added in the server.
 function onitemUpdate (data) {
-	food_pickup.push(new food_object(data.id, data.type, data.x, data.y)); 
+	onitemremove(data);
+	land.push(new land_object(data.id, data.owner, data.x, data.y, data.color)); 
 }
 
 // function called when food needs to be removed in the client. 
 function onitemremove (data) {
-	
 	var removeItem; 
 	removeItem = finditembyid(data.id);
-	food_pickup.splice(food_pickup.indexOf(removeItem), 1); 
+
+	if (!removeItem) {
+		return;
+	}
+
+	land.splice(land.indexOf(removeItem), 1); 
 	
 	//destroy the phaser object 
-	removeItem.item.destroy(true,false);
-	
+	removeItem.item.destroy(true, false);
 }
 
-// the food class
-var food_object = function (id, type, startx, starty, value) {
+// the land class
+var land_object = function (id, owner_id, startx, starty, color) {
 	// unique id for the food.
 	//generated in the server with node-uuid
+	console.log("land_obj constr", startx, starty);
 	this.id = id; 
-	
+	this.owner_id = owner_id;
+	this.type = "land_object";
+
 	//positinon of the food
 	this.posx = startx;  
 	this.posy = starty; 
-	this.powerup = value;
+	this.color = color;
 	
 	//create a circulr phaser object for food
 	this.item = game.add.graphics(this.posx, this.posy);
-	this.item.beginFill(0xFF0000);
-	this.item.lineStyle(2, 0xFF0000, 1);
-	this.item.drawCircle(0, 0, 20);
+	this.item.beginFill(color);
+	this.item.lineStyle(2, color, 1);
+	this.item.drawRect(-15, -15, 30, 30);
 
-	this.item.type = 'food_body';
 	this.item.id = id;
-	
-	game.physics.p2.enableBody(this.item, true);
-	this.item.body.clearShapes();
-	this.item.body_size = 10; 
-	this.item.body.addCircle(this.item.body_size, 0, 0);
-	this.item.body.data.gravityScale = 0;
-	this.item.body.data.shapes[0].sensor = true;
-
 }

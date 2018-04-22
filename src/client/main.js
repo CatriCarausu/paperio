@@ -1,8 +1,8 @@
 var socket = io({transports: ['websocket'], upgrade: false});
 
 
-canvas_width = 1500; // window.innerWidth * window.devicePixelRatio;
-canvas_height = 730; // window.innerHeight * window.devicePixelRatio;
+canvas_width = 1500 - 15; // window.innerWidth * window.devicePixelRatio;
+canvas_height = 720; // window.innerHeight * window.devicePixelRatio;
 
 game = new Phaser.Game(canvas_width, canvas_height, Phaser.CANVAS, 'gameDiv');
 
@@ -10,8 +10,8 @@ game = new Phaser.Game(canvas_width, canvas_height, Phaser.CANVAS, 'gameDiv');
 var enemies = [];
 
 var gameProperties = { 
-	gameWidth: 1500,
-	gameHeight: 730,
+	gameWidth: 1500 - 15,
+	gameHeight: 720,
 	game_elemnt: "gameDiv",
 	in_game: false,
 };
@@ -41,18 +41,19 @@ function onRemovePlayer (data) {
 }
 
 function createPlayer (data) {
-	player = game.add.graphics(100, 100);
+	player = game.add.graphics(data.x, data.y);
 
 	// set a fill and line style
 	player.beginFill(data.color);
-	player.lineStyle(1, data.color, 0.1);
+	player.lineStyle(2,0xffffff, 1);
 	player.drawRect(-data.size/2, -data.size/2, data.size, data.size);
 	player.endFill();
 
+	player.color = data.color;
 	player.type = "player_body"; 
 
 	// draw a shape
-	game.physics.p2.enableBody(player, true);
+	game.physics.p2.enableBody(player, false);
 
 	//enable collision and when it makes a contact with another body, call player_coll
 	player.body.onBeginContact.add(player_coll, this); 
@@ -76,8 +77,8 @@ var remote_player = function (id, startx, starty, startSize, color) {
 	this.player = game.add.graphics(this.x , this.y);
 
 	// set a fill and line style
-	player.beginFill(color,1);
-    player.lineStyle(2, color, 1);
+	player.beginFill(color, 1);
+    player.lineStyle(2, "#000000", 1);
 	player.drawRect(-startSize / 2, -startSize / 2 , startSize, startSize);
 	player.endFill();
 
@@ -85,9 +86,10 @@ var remote_player = function (id, startx, starty, startSize, color) {
 	this.initial_size = startSize;
 	this.player.type = "player_body";
 	this.player.id = this.id;
+	this.player.color = color;
 
 	// draw a shape
-	game.physics.p2.enableBody(this.player, true);
+	game.physics.p2.enableBody(this.player, false);
 }
 
 //Server will tell us when a new enemy player connects to the server.
@@ -118,22 +120,27 @@ function onEnemyMove (data) {
 
 //we're receiving the calculated position from the server and changing the player position
 function onInputRecieved (data) {	
-	game.physics.arcade.moveToXY(player, data.x, data.y, 125);
+	// game.physics.arcade.moveToXY(player, data.x, data.y);
+	var playerData = {
+		color: player.color,
+		size: 30,
+		x: data.x, 
+		y: data.y, 
+	}
+
+	player.destroy();
+	createPlayer(playerData);
+
 }
 
 function onKilled (data) {
 	player.destroy();
 }
 
-
 //This is where we use the socket id. 
 //Search through enemies list to find the right enemy of the id.
 function findplayerbyid (id) {
-	for (var i = 0; i < enemies.length; i++) {
-		if (enemies[i].id == id) {
-			return enemies[i]; 
-		}
-	}
+	return enemies.find(x => x.id == id); 
 }
 
 //create leader board in here.
@@ -145,7 +152,7 @@ function createLeaderBoard() {
     leaderBox.lineStyle(2, 0x202226, 1);
     leaderBox.drawRect(0, 0, 220, 220);
 	
-	var style = { font: "13px Press Start 2P", fill: "black", align: "left", fontSize: '22px'};
+	var style = { font: "Calibri", fill: "white", align: "left", fontSize: '22px'};
 	
 	leader_text = game.add.text(10, 10, "", style);
 	leader_text.anchor.set(0);
@@ -219,7 +226,7 @@ main.prototype = {
 	
 	create: function () {
 		game.physics.startSystem(Phaser.Physics.ARCADE);
-		game.stage.backgroundColor = "#f5fff4";
+		// game.stage.backgroundColor = "#f5fff4";
 		
 		console.log("client started");
 		socket.on("connect", onsocketConnected); 
@@ -250,36 +257,76 @@ main.prototype = {
 	update: function () {
 		// emit the player input
 		//move the player when the player is made 
-		if (gameProperties.in_game) {
-		
-			if (game.input.keyboard.isDown(Phaser.Keyboard.LEFT)) {
-				socket.emit('input_fired', {
-					pointer_x: player.body.x - 10, 
-					pointer_y: player.body.y 
-				});
+
+		document.addEventListener('keyup', function(e) {
+			if (!gameProperties.in_game) {
+				return;
 			}
 
-			if (game.input.keyboard.isDown(Phaser.Keyboard.RIGHT)) {
-				socket.emit('input_fired', {
-					pointer_x: player.body.x + 10, 
-					pointer_y: player.body.y
-				});
-			}
-
-			if (game.input.keyboard.isDown(Phaser.Keyboard.UP)) {
+			if ((e.keyCode || e.which) == 37) { //left
 				socket.emit('input_fired', {
 					pointer_x: player.body.x, 
-					pointer_y: player.body.y - 10
+					pointer_y: player.body.y,
+					direction: 'left'
 				});
 			}
 
-			if (game.input.keyboard.isDown(Phaser.Keyboard.DOWN)) {
+			if ((e.keyCode || e.which) == 39) { //right
 				socket.emit('input_fired', {
 					pointer_x: player.body.x, 
-					pointer_y: player.body.y + 10
+					pointer_y: player.body.y,
+					direction: 'right'
 				});
 			}
-		}
+
+			if ((e.keyCode || e.which) == 38) { //up
+				socket.emit('input_fired', {
+					pointer_x: player.body.x, 
+					pointer_y: player.body.y,
+					direction: 'up'
+				});
+			}
+
+			if ((e.keyCode || e.which) == 40) { //down
+				socket.emit('input_fired', {
+					pointer_x: player.body.x, 
+					pointer_y: player.body.y,
+					direction: 'down'
+				});
+			}
+
+		}, true);
+
+		// if (gameProperties.in_game) {
+
+		// 	if (game.input.keyboard.isDown(Phaser.Keyboard.LEFT)) {
+		// 		socket.emit('input_fired', {
+		// 			pointer_x: player.body.x - 30, 
+		// 			pointer_y: player.body.y 
+		// 		});
+		// 	}
+
+		// 	if (game.input.keyboard.isDown(Phaser.Keyboard.RIGHT)) {
+		// 		socket.emit('input_fired', {
+		// 			pointer_x: player.body.x + 30, 
+		// 			pointer_y: player.body.y
+		// 		});
+		// 	}
+
+		// 	if (game.input.keyboard.isDown(Phaser.Keyboard.UP)) {
+		// 		socket.emit('input_fired', {
+		// 			pointer_x: player.body.x, 
+		// 			pointer_y: player.body.y - 30
+		// 		});
+		// 	}
+
+		// 	if (game.input.keyboard.isDown(Phaser.Keyboard.DOWN)) {
+		// 		socket.emit('input_fired', {
+		// 			pointer_x: player.body.x, 
+		// 			pointer_y: player.body.y + 30
+		// 		});
+		// 	}
+		// }
 	}
 }
 
