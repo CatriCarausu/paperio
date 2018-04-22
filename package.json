@@ -10,7 +10,9 @@
     "p2": "^0.7.1",
     "socket.io": "^2.1.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@orange-games/phaser-input": "^2.0.5"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

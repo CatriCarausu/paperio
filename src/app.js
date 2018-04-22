@@ -2,7 +2,7 @@ var express = require('express');
 //require p2 physics library in the server.
 var p2 = require('p2'); 
 //get the node-uuid package for creating unique id
-var unique = require('node-uuid')
+var unique = require('node-uuid');
 
 var app = express();
 var serv = require('http').Server(app);
@@ -10,7 +10,10 @@ var serv = require('http').Server(app);
 app.get('/',function(req, res) {
 	res.sendFile(__dirname + '/client/index.html');
 });
-app.use('/client',express.static(__dirname + '/client'));
+app.get('/css/style.css',function(req, res) {
+	res.sendFile(__dirname + '/client/css/style.css');
+});
+app.use('/client', express.static(__dirname + '/client'));
 
 serv.listen(process.env.PORT || 2000);
 console.log("Server started.");
@@ -67,8 +70,9 @@ function generateLandSquares() {
 }
 
 //a player class in the server
-var Player = function (startX, startY) {
+var Player = function (startX, startY, username) {
 	this.id;
+	this.username = username;
 	this.score = 9;
 	this.color = getRndColor();
 	this.trailColor = trailColor(this.color);
@@ -99,13 +103,11 @@ function heartbeat () {
 }
 
 function addLandForPlayer(player, lastLand) {
-
 	if (!player.trail || player.trail.length === 0){
 		return;
 	}
 
 	var i, j; 
-
 	var boxBorders = completeBox(player, lastLand);
 	completeInsideBorders(boxBorders, player);
 
@@ -133,6 +135,10 @@ function addLandForPlayer(player, lastLand) {
 function completeBox (player, lastLand) {
 	var firstLand = player.trail[0];
 	var border = player.trail;
+
+	if (lastLand.x === firstLand.x || lastLand.y === firstLand.y) {
+		return specialCase(player, lastLand);
+	}
 
 	//find owned land to complete box
 	var missingBorderFirstLand = game_instance.land.filter(land => land.owner_id === player.id && (
@@ -195,6 +201,35 @@ function completeBox (player, lastLand) {
 
 		for (var x = start; x <= end; x+=30) {
 			var missingLand = missingBorderLastLand.find(l => l.y === intersection.y && l.x === x);
+			if (border.indexOf(missingLand) === -1 && missingLand) {
+				border.push(missingLand);
+			}
+		}
+	}
+
+	return border;
+}
+
+function specialCase (player, lastLand) {
+	var firstLand = player.trail[0];
+	var border = player.trail;
+
+	if (lastLand.x === firstLand.x) { 
+		var start = firstLand.y < lastLand.y ? firstLand.y : lastLand.y;
+		var end = firstLand.y > lastLand.y ? firstLand.y : lastLand.y;
+
+		for (var y = start; y <= end; y+=30) {
+			var missingLand = game_instance.land.find(l => l.owner_id === player.id && l.x === lastLand.x && l.y === y);
+			if (border.indexOf(missingLand) === -1 && missingLand) {
+				border.push(missingLand);
+			}
+		}
+	} else {
+		var start = firstLand.x < lastLand.x ? firstLand.x : lastLand.x;
+		var end = firstLand.x > lastLand.x ? firstLand.x : lastLand.x;
+
+		for (var x = start; x <= end; x+=30) {
+			var missingLand = game_instance.land.find(l => l.owner_id === player.id && l.y === lastLand.y && l.x === x)
 			if (border.indexOf(missingLand) === -1 && missingLand) {
 				border.push(missingLand);
 			}
@@ -309,7 +344,8 @@ function onNewplayer (data) {
 	var startingPos = generateStartingPosition();
 	
 	//new player instance
-	var newPlayer = new Player(startingPos.x, startingPos.y);
+	var newPlayer = new Player(startingPos.x, startingPos.y, data.username);
+	console.log(newPlayer.username); 	
 	newPlayer.id = this.id;
 
 	setLandForStarttingPosition(startingPos.x, startingPos.y, newPlayer.id, newPlayer.color, this);
@@ -325,7 +361,7 @@ function onNewplayer (data) {
 	newPlayer.playerBody = playerBody;
 	world.addBody(newPlayer.playerBody);
 	
-	console.log("created new player with id " + this.id);
+	console.log("created new player with id " + this.id + " and username " + newPlayer.username);
 	newPlayer.id = this.id; 	
 	
 	this.emit('create_player', {size: newPlayer.size, color: newPlayer.color, x: startingPos.x, y: startingPos.y});
@@ -509,8 +545,9 @@ function sortPlayerListByScore() {
 	
 	var playerListSorted = [];
 	for (var i = 0; i < player_lst.length; i++) {
-		playerListSorted.push({id: player_lst[i].id, score: player_lst[i].score});
+		playerListSorted.push({id: player_lst[i].id, name: player_lst[i].username, score: player_lst[i].score});
 	}
+
 	console.log(playerListSorted);
 	io.emit("leader_board", playerListSorted);
 }
@@ -605,9 +642,10 @@ function emitInitialLand (ts) {
 }
 
  // io connection 
-var io = require('socket.io')(serv,{});
+var io = require('socket.io')(serv, {});
 
 io.sockets.on('connection', function(socket){
+
 	console.log("socket connected"); 
 	emitInitialLand(this);
 	

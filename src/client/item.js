@@ -31,7 +31,6 @@ function onitemremove (data) {
 var land_object = function (id, owner_id, startx, starty, color) {
 	// unique id for the food.
 	//generated in the server with node-uuid
-	console.log("land_obj constr", startx, starty);
 	this.id = id; 
 	this.owner_id = owner_id;
 	this.type = "land_object";

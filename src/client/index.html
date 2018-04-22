@@ -1,22 +1,28 @@
 <!doctype html> 
 <html lang = "en">
 	<head>
-
-
+		<link rel="stylesheet" href="css/style.css"/>
 	</head>
 	<body>
+
+		<div id ="intro">
+			<h2 id="title">Welcome to Paper.io!</h2>
+			<div id ="input">
+				<input id="usernameInput" placeholder="Your name"></input>
+				<button onclick="playTheGame()" autofocus>Play!</button>
+			</div>
+		</div>
 	
 		<div id="gameDiv">
 		</div>
 	
 	</body>
 	
+	<script src="client/login.js"></script>
 	<script src="//cdn.jsdelivr.net/phaser/2.6.2/phaser.min.js"></script>
 	<script src="/socket.io/socket.io.js"></script>
 	<script src="client/colide.js"></script>
 	<script src="client/item.js"></script>
 	<script src="client/main.js"></script>
-	
-	<script>
-	</script>
+
 </html>

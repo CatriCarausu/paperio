@@ -1,13 +1,13 @@
-var socket = io({transports: ['websocket'], upgrade: false});
+var socket;
 
-
-canvas_width = 1500 - 15; // window.innerWidth * window.devicePixelRatio;
+canvas_width = 1500; // window.innerWidth * window.devicePixelRatio;
 canvas_height = 720; // window.innerHeight * window.devicePixelRatio;
 
 game = new Phaser.Game(canvas_width, canvas_height, Phaser.CANVAS, 'gameDiv');
 
 //the enemy player list 
 var enemies = [];
+var userName;
 
 var gameProperties = { 
 	gameWidth: 1500 - 15,
@@ -23,7 +23,7 @@ function onsocketConnected () {
 	console.log("connected to server"); 
 	gameProperties.in_game = true;
 	// send the server our initial position and tell it we are connected
-	socket.emit('new_player', {x: 0, y: 0});
+	socket.emit('new_player', {username: userName});
 }
 
 // When the server notifies us of client disconnection, we find the disconnected
@@ -145,16 +145,16 @@ function findplayerbyid (id) {
 
 //create leader board in here.
 function createLeaderBoard() {
-	var leaderBox = game.add.graphics(game.width * 0.86, game.height * 0.02);
+	var leaderBox = game.add.graphics(game.width * 0.85, game.height * 0.02);
 	leaderBox.fixedToCamera = true;
 	// draw a rectangle
-	leaderBox.beginFill(0xD3D3D3, 0.3);
-    leaderBox.lineStyle(2, 0x202226, 1);
-    leaderBox.drawRect(0, 0, 220, 220);
+	leaderBox.beginFill(0xd1f2eb, 1);
+    leaderBox.lineStyle(5, 0x117864, 1);
+    leaderBox.drawRect(0, 0, 210, 700);
 	
-	var style = { font: "Calibri", fill: "white", align: "left", fontSize: '22px'};
+	var style = { font: "Calibri", fill: "#117864", align: "left", fontSize: '23px', fontWeight: 'bold'};
 	
-	leader_text = game.add.text(10, 10, "", style);
+	leader_text = game.add.text(10, 10, "Leaderboard", style);
 	leader_text.anchor.set(0);
 
 	leaderBox.addChild(leader_text);
@@ -186,8 +186,8 @@ function lbupdate (data) {
 		
 		//here we are checking if user id is greater than 10 characters, if it is 
 		//it is too long, so we're going to trim it.
-		if (data[i].id.length >= 10) {
-			var username = data[i].id;
+		var username = data[i].name;
+		if (data[i].name.length >= 10) {
 			var temp = ""; 
 			for (var j = 0; j < maxlen; j++) {
 				temp += username[j];
@@ -197,20 +197,24 @@ function lbupdate (data) {
 			username = temp;
 		
 			board_string = board_string.concat(i + 1,": ");
-			board_string = board_string.concat(username," ",(data[i].score).toString() + "\n");
-		
-		} else {
-			board_string = board_string.concat("\n");
 		}
+		
+		board_string = board_string.concat(i + 1, ". ", username,"   ",(data[i].score).toString() + "\n");
 		
 	}
 	
-	console.log(board_string);
-	leader_text.setText(board_string); 
+	leader_text.setText("Leaderboard: \n" + board_string); 
 }
 
 main.prototype = {
+	init: function (data) {
+		userName = data.username;
+		socket = io({transports: ['websocket'], upgrade: false});
+	},
+
 	preload: function() {
+		document.getElementById("gameDiv").style.visibility = 'visible'; 
+		document.getElementById("intro").style.display = 'none';
 		game.stage.disableVisibilityChange = true;
 		game.scale.scaleMode = Phaser.ScaleManager.RESIZE;
 		game.world.setBounds(0, 0, gameProperties.gameWidth, gameProperties.gameHeight, false, false, false, false);
@@ -333,7 +337,8 @@ main.prototype = {
 var gameManager = {
     init: function(gameContainerElementId){
 		game.state.add('main', main);
-		game.state.start('main'); 
+		game.state.add('login', login);
+		game.state.start('login'); 
     }
 };
 
