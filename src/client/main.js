@@ -197,7 +197,7 @@ function lbupdate (data) {
 			username = temp;
 		
 			board_string = board_string.concat(i + 1,": ");
-			board_string = board_string.concat(username," ",(data[i].size).toString() + "\n");
+			board_string = board_string.concat(username," ",(data[i].score).toString() + "\n");
 		
 		} else {
 			board_string = board_string.concat("\n");

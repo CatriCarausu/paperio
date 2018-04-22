@@ -69,6 +69,7 @@ function generateLandSquares() {
 //a player class in the server
 var Player = function (startX, startY) {
 	this.id;
+	this.score = 9;
 	this.color = getRndColor();
 	this.trailColor = trailColor(this.color);
 	this.x = startX;
@@ -98,9 +99,15 @@ function heartbeat () {
 }
 
 function addLandForPlayer(player, lastLand) {
+
+	if (!player.trail || player.trail.length === 0){
+		return;
+	}
+
 	var i, j; 
 
-	completeBox(player, lastLand);
+	var boxBorders = completeBox(player, lastLand);
+	completeInsideBorders(boxBorders, player);
 
 	player.trail.forEach( land => {
 		var land_item = game_instance.land.find(l => land.id === l.id);
@@ -117,89 +124,135 @@ function addLandForPlayer(player, lastLand) {
 		//set the food data back to client
 		io.emit("item_update", land_item); 
 
-		completeRowAndCol(land_item, player, lastLand);
+		player.score++;
 	});
 
 	player.trail = [];
 }
 
-function completeBox (currentLand, player, lastLand) {
-	var lastSameX = findLastWithSameX(player, currentLand.x, currentLand.y, lastLand);
-	var lastSameY = findLastWithSameY(player, currentLand.x, currentLand.y, lastLand);
-	var start, end;
+function completeBox (player, lastLand) {
+	var firstLand = player.trail[0];
+	var border = player.trail;
 
-	if (lastSameX) {
-		start = currentLand.y < lastSameX.y ? currentLand.y : lastSameX.y;
-		end = currentLand.y > lastSameX.y ? currentLand.y : lastSameX.y;
-		for (var i = start; i <= end; i+=30) {
-			var land_item = game_instance.land.find(l => l.x === currentLand.x && l.y === i);
+	//find owned land to complete box
+	var missingBorderFirstLand = game_instance.land.filter(land => land.owner_id === player.id && (
+		land.x === firstLand.x || land.y === firstLand.y
+	));
 
-			if (land_item.owner_id && land_item.owner_id === player.id) {
-				continue;
+	var missingBorderLastLand = game_instance.land.filter(land => land.owner_id === player.id && (	
+		land.x === lastLand.x || land.y === lastLand.y
+	));
+
+	//findIntersection
+	var intersection = missingBorderFirstLand.find(l => missingBorderLastLand.indexOf(l) !== -1);
+
+	if (!intersection) {
+		console.log('no intersection');
+		return;
+	}
+
+	border.push(intersection);
+
+	if (intersection.x === firstLand.x) {
+		var start = firstLand.y < intersection.y ? firstLand.y : intersection.y;
+		var end = firstLand.y > intersection.y ? firstLand.y : intersection.y;
+
+		for (var y = start; y <= end; y+=30) {
+			var missingLand = missingBorderFirstLand.find(l => l.x === intersection.x && l.y === y);
+			if (border.indexOf(missingLand) === -1 && missingLand) {
+				border.push(missingLand);
 			}
-			
-			land_item.x = currentLand.x;
-			land_item.y = i;
-			land_item.owner_id = player.id;
-			land_item.color = player.color;
-
-			//set the food data back to client
-			io.emit("item_update", land_item); 
 		}
 	}
 
-	if (lastSameY) {
-		start = currentLand.x < lastSameY.x ? currentLand.x : lastSameY.x;
-		end = currentLand.x > lastSameY.x ? currentLand.x : lastSameY.x;
-		for (var i = start; i <= end; i+=30) {
-			var land_item = game_instance.land.find(l => l.y === currentLand.y && l.x === i);
-			
-			if (land_item.owner_id && land_item.owner_id === player.id) {
-				continue;
+	if (intersection.y === firstLand.y) {
+		var start = firstLand.x < intersection.x ? firstLand.x : intersection.x;
+		var end = firstLand.x > intersection.x ? firstLand.x : intersection.x;
+
+		for (var x = start; x <= end; x+=30) {
+			var missingLand = missingBorderFirstLand.find(l => l.y === intersection.y && l.x === x)
+			if (border.indexOf(missingLand) === -1 && missingLand) {
+				border.push(missingLand);
 			}
-	
-			land_item.y = currentLand.y;
-			land_item.x = i;
-			land_item.owner_id = player.id;
-			land_item.color = player.color;
-	
-			//set the food data back to client
-			io.emit("item_update", land_item); 
 		}
 	}
-	
+
+	if (intersection.x === lastLand.x) {
+		var start = lastLand.y < intersection.y ? lastLand.y : intersection.y;
+		var end = lastLand.y > intersection.y ? lastLand.y : intersection.y;
+
+		for (var y = start; y <= end; y+=30) {
+			var missingLand = missingBorderLastLand.find(l => l.x === intersection.x && l.y === y);
+			if (border.indexOf(missingLand) === -1 && missingLand) {
+				border.push(missingLand);
+			}
+		}
+	}
+
+	if (intersection.y === lastLand.y) {
+		var start = lastLand.x < intersection.x ? lastLand.x : intersection.x;
+		var end = lastLand.x > intersection.x ? lastLand.x : intersection.x;
+
+		for (var x = start; x <= end; x+=30) {
+			var missingLand = missingBorderLastLand.find(l => l.y === intersection.y && l.x === x);
+			if (border.indexOf(missingLand) === -1 && missingLand) {
+				border.push(missingLand);
+			}
+		}
+	}
+
+	return border;
 }
 
-function findLastWithSameX (player, x, y, lastLand) {
+function completeInsideBorders (borders, player) {
+	borders.forEach(border => {
+		var capatX = borders.find(b => b.x === border.x && border.id !== b.id);
+		var s, e;
+
+		if (capatX) {
+			s = capatX.y < border.y ? capatX.y : border.y;
+			e = capatX.y > border.y ? capatX.y : border.y;
+			for (var i = s + 30; i < e; i+=30) {
+				var land_item = game_instance.land.find(land => land.x === border.x && land.y === i);
+				
+				if (land_item.owner_id && land_item.owner_id === player.id) {
+					continue;
+				}
 	
+				land_item.owner_id = player.id;
+				land_item.color = player.color;
+		
+				//set the food data back to client
+				io.emit("item_update", land_item); 
 
-	var sameX = game_instance.land.filter(t => t.x === x && t.owner_id === player.id);
-	var max = 100000, i;
-	var land;
+				player.score++;
+				sortPlayerListByScore();
+			}
+		}
+		
+		var capatY = borders.find(b => b.y === border.y && border.id !== b.id);
+		
+		if (capatY) {
+			s = capatY.x < border.x ? capatY.x : border.x;
+			e = capatY.x > border.x ? capatY.x : border.x;
+			for (var i = s; i <= e; i+=30) {
+				var land_item = game_instance.land.find(land => land.y === border.y && land.x === i);
+				
+				if (land_item.owner_id && land_item.owner_id === player.id) {
+					continue;
+				}
+	
+				land_item.owner_id = player.id;
+				land_item.color = player.color;
+		
+				//set the food data back to client
+				io.emit("item_update", land_item); 
 
-	sameX.forEach(s => {
-		if (Math.abs(s.y - y) < max) {
-			land = s;
-			max = s.y;
+				player.score++;
+				sortPlayerListByScore();
+			}
 		}
 	});
-
-	return land;
-}
-
-function findLastWithSameY (player, x, y, lastLand) {	
-	var sameX = game_instance.land.filter(t => t.y === y && t.owner_id === player.id);
-	var max = 1000000, i;
-	var land;
-
-	sameX.forEach(s => {
-		if (Math.abs(s.x - x) < max) {
-			land = s;
-			max = s.x;
-		}
-	});
-
-	return land;
 }
 
 function generateStartingPosition () {
@@ -294,7 +347,8 @@ function onNewplayer (data) {
 			x: existingPlayer.x,
 			y: existingPlayer.y, 
 			color: existingPlayer.color,	
-			size: existingPlayer.size
+			size: existingPlayer.size,
+			score: existingPlayer.score
 		};
 		console.log("pushing player");
 		//send message to the sender-client only
@@ -311,23 +365,29 @@ function onNewplayer (data) {
 function onlandPicked(data) {
 	var player = player_lst.find(pl => pl.id === data.player_id);
 	var currentLand = game_instance.land.find(l => l.id === data.id);
+	var nextLand = game_instance.land.find(l => l.x === player.x && l.y === player.y);
 
 	if (!player || !currentLand) {
 		return;
 	}
-
+	
 	if (currentLand.owner_id === data.player_id) {
-		addLandForPlayer(player, currentLand);
 		return;
 	}
-	
+
 	currentLand.color = trailColor(data.color);
-	player.trail.push(currentLand);
+	if (player.trail.indexOf(currentLand) === -1) {
+		player.trail.push(currentLand);
+	}
 
 	if (data.ts) {
 		data.ts.emit("item_update", currentLand);
 	} else {
 		this.emit("item_update", currentLand);
+	}
+
+	if (nextLand.owner_id === data.player_id) {
+		addLandForPlayer(player, currentLand);
 	}
 }
 
@@ -344,13 +404,6 @@ function onInputFired (data) {
 	if (!movePlayer.sendData) {
 		return;
 	}
-
-	onlandPicked({
-		id: game_instance.land.find(l => l.x === data.pointer_x && l.y === data.pointer_y).id,
-		player_id: movePlayer.id,
-		color: movePlayer.color,
-		ts: this
-	});
 	
 	//every 50ms, we send the data. 
 	setTimeout(function() {movePlayer.sendData = true}, 50);
@@ -374,6 +427,13 @@ function onInputFired (data) {
 
 	movePlayer.x = data.pointer_x + xAdd; 
 	movePlayer.y = data.pointer_y + yAdd;
+
+	onlandPicked({
+		id: game_instance.land.find(l => l.x === data.pointer_x && l.y === data.pointer_y).id,
+		player_id: movePlayer.id,
+		color: movePlayer.color,
+		ts: this
+	});
 
 	movePlayer.playerBody.position[0] = movePlayer.x;
 	movePlayer.playerBody.position[1] = movePlayer.y;
@@ -444,12 +504,12 @@ function find_land (id) {
 
 function sortPlayerListByScore() {
 	player_lst.sort(function(a,b) {
-		return b.size - a.size;
+		return b.score - a.score;
 	});
 	
 	var playerListSorted = [];
 	for (var i = 0; i < player_lst.length; i++) {
-		playerListSorted.push({id: player_lst[i].id, size: player_lst[i].size});
+		playerListSorted.push({id: player_lst[i].id, score: player_lst[i].score});
 	}
 	console.log(playerListSorted);
 	io.emit("leader_board", playerListSorted);
