@@ -86,30 +86,14 @@ var Player = function (startX, startY, username) {
 	this.trail = [];
 }
 
-//We call physics handler 60fps. The physics is calculated here. 
-setInterval(heartbeat, 1000/60);
-
-//Steps the physics world. 
-function physics_hanlder() {
-	var currentTime = (new Date).getTime();
-	timeElapsed = currentTime - startTime;
-	var dt = lastTime ? (timeElapsed - lastTime) / 1000 : 0;
-    dt = Math.min(1 / 10, dt);
-    world.step(timeStep);
-}
-
-function heartbeat () {
-	physics_hanlder();
-}
-
-function addLandForPlayer(player, lastLand) {
+function addLandForPlayer(player, lastLand, ts) {
 	if (!player.trail || player.trail.length === 0){
 		return;
 	}
 
 	var i, j; 
 	var boxBorders = completeBox(player, lastLand);
-	completeInsideBorders(boxBorders, player);
+	completeInsideBorders(boxBorders, player, ts);
 
 	player.trail.forEach( land => {
 		var land_item = game_instance.land.find(l => land.id === l.id);
@@ -124,7 +108,8 @@ function addLandForPlayer(player, lastLand) {
 		land_item.color = player.color;
 
 		//set the food data back to client
-		io.emit("item_update", land_item); 
+		ts.emit("item_update", land_item); 
+		ts.broadcast.emit("item_update", land_item); 
 
 		player.score++;
 	});
@@ -239,7 +224,7 @@ function specialCase (player, lastLand) {
 	return border;
 }
 
-function completeInsideBorders (borders, player) {
+function completeInsideBorders (borders, player, ts) {
 	borders.forEach(border => {
 		var capatX = borders.find(b => b.x === border.x && border.id !== b.id);
 		var s, e;
@@ -258,7 +243,8 @@ function completeInsideBorders (borders, player) {
 				land_item.color = player.color;
 		
 				//set the food data back to client
-				io.emit("item_update", land_item); 
+				ts.emit("item_update", land_item); 
+				ts.broadcast.emit("item_update", land_item); 
 
 				player.score++;
 				sortPlayerListByScore();
@@ -281,7 +267,8 @@ function completeInsideBorders (borders, player) {
 				land_item.color = player.color;
 		
 				//set the food data back to client
-				io.emit("item_update", land_item); 
+				ts.emit("item_update", land_item);
+				ts.broadcast.emit("item_update", land_item); 
 
 				player.score++;
 				sortPlayerListByScore();
@@ -333,7 +320,8 @@ function setLandForStarttingPosition (x, y, owner_id, color, ts) {
 			land.owner_id = owner_id;
 			land.color = color;
 
-			ts.emit("item_update", land)
+			ts.emit("item_update", land);
+			ts.broadcast.emit("item_update", land);
 		}
 	}
 }
@@ -378,13 +366,15 @@ function onNewplayer (data) {
 	//send to the new player about everyone who is already connected. 	
 	for (i = 0; i < player_lst.length; i++) {
 		existingPlayer = player_lst[i];
+		if (existingPlayer.id === newPlayer.id) {
+			continue;
+		}
 		var player_info = {
 			id: existingPlayer.id,
 			x: existingPlayer.x,
 			y: existingPlayer.y, 
 			color: existingPlayer.color,	
-			size: existingPlayer.size,
-			score: existingPlayer.score
+			size: existingPlayer.size
 		};
 		console.log("pushing player");
 		//send message to the sender-client only
@@ -411,6 +401,9 @@ function onlandPicked(data) {
 		return;
 	}
 
+	checkTailCut(player, data.ts ? data.ts : this);
+	checkOtherTailCut(player, data.ts ? data.ts : this, currentLand);
+
 	currentLand.color = trailColor(data.color);
 	if (player.trail.indexOf(currentLand) === -1) {
 		player.trail.push(currentLand);
@@ -418,13 +411,47 @@ function onlandPicked(data) {
 
 	if (data.ts) {
 		data.ts.emit("item_update", currentLand);
+		data.ts.broadcast.emit("item_update", currentLand);
 	} else {
 		this.emit("item_update", currentLand);
+		this.broadcast.emit("item_update", currentLand);
 	}
 
 	if (nextLand.owner_id === data.player_id) {
-		addLandForPlayer(player, currentLand);
+		addLandForPlayer(player, currentLand, data.ts ? data.ts : this);
 	}
+}
+
+function checkTailCut(player, ts) {
+	if (player.trail.find(l => l.x === player.x && l.y === player.y)) {
+		ts.emit("killed", {score: player.score});
+		//provide the new size the enemy will become
+		ts.broadcast.emit('remove_player', {id: this.id});
+		playerKilled(player);
+	}
+}
+
+function checkOtherTailCut(player, ts, currentLand) {
+	var enemy = player_lst.find(player => player.trailColor === currentLand.color);
+
+	if (enemy && enemy.id !== player.id) {
+		killEnemy(enemy, ts);
+	}
+}
+
+function killEnemy (enemyPlayer, ts) {
+	if (enemyPlayer.dead) {
+		return;
+	}
+
+	ts.emit('remove_player', {id: enemyPlayer.id}); 
+	ts.broadcast.to(enemyPlayer.id).emit("killed", {score: enemyPlayer.score}); 
+	//send to everyone except sender.
+	ts.broadcast.emit('remove_player', {id: enemyPlayer.id});
+	playerKilled(enemyPlayer);
+ 
+	sortPlayerListByScore();
+	console.log("someone ate someone!!!");
 }
 
 //instead of listening to player positions, we listen to user inputs 
@@ -464,12 +491,16 @@ function onInputFired (data) {
 	movePlayer.x = data.pointer_x + xAdd; 
 	movePlayer.y = data.pointer_y + yAdd;
 
-	onlandPicked({
-		id: game_instance.land.find(l => l.x === data.pointer_x && l.y === data.pointer_y).id,
-		player_id: movePlayer.id,
-		color: movePlayer.color,
-		ts: this
-	});
+	var land = game_instance.land.find(l => l.x === data.pointer_x && l.y === data.pointer_y);
+
+	if (land) {
+		onlandPicked({
+			id: land.id,
+			player_id: movePlayer.id,
+			color: movePlayer.color,
+			ts: this
+		});
+	}
 
 	movePlayer.playerBody.position[0] = movePlayer.x;
 	movePlayer.playerBody.position[1] = movePlayer.y;
@@ -488,7 +519,8 @@ function onInputFired (data) {
 		id: movePlayer.id, 
 		x: movePlayer.playerBody.position[0],
 		y: movePlayer.playerBody.position[1],
-		size: movePlayer.size
+		size: movePlayer.size,
+		color: movePlayer.color
 	}
 	
 	//send to everyone except sender 
@@ -499,30 +531,22 @@ function onPlayerCollision (data) {
 	var movePlayer = find_playerid(this.id); 
 	var enemyPlayer = find_playerid(data.id); 
 	
-	
 	if (movePlayer.dead || enemyPlayer.dead)
 		return
 	
 	if (!movePlayer || !enemyPlayer)
 		return
-	
-	if (movePlayer.size == enemyPlayer)
-		return
 
 	//the main player size is less than the enemy size
-	else if (movePlayer.size < enemyPlayer.size) {
-		var gained_size = movePlayer.size / 2;
-		enemyPlayer.size += gained_size; 
-		this.emit("killed");
+	else if (movePlayer.score < enemyPlayer.score) {
+		this.emit("killed", {score: movePlayer.score});
 		//provide the new size the enemy will become
 		this.broadcast.emit('remove_player', {id: this.id});
 		playerKilled(movePlayer);
 
 	} else {
-		var gained_size = enemyPlayer.size / 2;
-		movePlayer.size += gained_size;
 		this.emit('remove_player', {id: enemyPlayer.id}); 
-		this.broadcast.to(data.id).emit("killed"); 
+		this.broadcast.to(data.id).emit("killed", {score: enemyPlayer.score}); 
 		//send to everyone except sender.
 		this.broadcast.emit('remove_player', {id: enemyPlayer.id});
 		playerKilled(enemyPlayer);

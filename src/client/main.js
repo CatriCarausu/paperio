@@ -32,7 +32,7 @@ function onRemovePlayer (data) {
 	var removePlayer = findplayerbyid(data.id);
 	// Player not found
 	if (!removePlayer) {
-		console.log('Player not found: ', data.id)
+		console.log('Player not found: ', data.id);
 		return;
 	}
 	
@@ -74,13 +74,13 @@ var remote_player = function (id, startx, starty, startSize, color) {
 	//this is the unique socket id. We use it as a unique name for enemy
 	this.id = id;
 	
-	this.player = game.add.graphics(this.x , this.y);
+	this.player = game.add.graphics(startx , starty);
 
 	// set a fill and line style
-	player.beginFill(color, 1);
-    player.lineStyle(2, "#000000", 1);
-	player.drawRect(-startSize / 2, -startSize / 2 , startSize, startSize);
-	player.endFill();
+	this.player.beginFill(color);
+    this.player.lineStyle(2, 0xffffff, 1);
+	this.player.drawRect(-startSize / 2, -startSize / 2 , startSize, startSize);
+	this.player.endFill();
 
 	//we set the initial size;
 	this.initial_size = startSize;
@@ -99,23 +99,30 @@ function onNewPlayer (data) {
 	console.log(data);
 	var new_enemy = new remote_player(data.id, data.x, data.y, data.size, data.color); 
 	enemies.push(new_enemy);
+	console.log(enemies);
 }
 
 //Server tells us there is a new enemy movement. We find the moved enemy
 //and sync the enemy movement with the server
 function onEnemyMove (data) {
 	var movePlayer = findplayerbyid(data.id); 
+	var index = enemies.findIndex(x => x.id === data.id);
 	
 	if (!movePlayer) {
 		return;
 	}
 	
-	//check if the server enemy size is not equivalent to the client
-	if (data.size != movePlayer.player.body_size) {
-		movePlayer.player.body_size = data.size; 
+	var playerData = {
+		id: data.id, 
+		color: data.color,
+		size: 30,
+		x: data.x, 
+		y: data.y, 
 	}
 
-	game.physics.arcade.moveToXY(movePlayer.player, data.x, data.y, 125);
+	movePlayer.player.destroy();
+	enemies.splice(index, 1);
+	onNewPlayer(playerData);
 }
 
 //we're receiving the calculated position from the server and changing the player position
@@ -135,6 +142,8 @@ function onInputRecieved (data) {
 
 function onKilled (data) {
 	player.destroy();
+	console.log('onKilled');
+	game.state.start("gameOver", true, true, {name: userName, score: data.score});
 }
 
 //This is where we use the socket id. 
@@ -195,8 +204,6 @@ function lbupdate (data) {
 			
 			temp += "...";
 			username = temp;
-		
-			board_string = board_string.concat(i + 1,": ");
 		}
 		
 		board_string = board_string.concat(i + 1, ". ", username,"   ",(data[i].score).toString() + "\n");
@@ -213,7 +220,8 @@ main.prototype = {
 	},
 
 	preload: function() {
-		document.getElementById("gameDiv").style.visibility = 'visible'; 
+		document.getElementById("gameDiv").style.display = 'block';
+        document.getElementById("gameOver").style.display = 'none';
 		document.getElementById("intro").style.display = 'none';
 		game.stage.disableVisibilityChange = true;
 		game.scale.scaleMode = Phaser.ScaleManager.RESIZE;
@@ -338,6 +346,7 @@ var gameManager = {
     init: function(gameContainerElementId){
 		game.state.add('main', main);
 		game.state.add('login', login);
+		game.state.add('gameOver', gOver);
 		game.state.start('login'); 
     }
 };

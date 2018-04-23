@@ -3,7 +3,9 @@ var login = function(game){
 
 login.prototype = {
 	preload: function() {
-        document.getElementById("gameDiv").style.visibility = 'hidden';
+        document.getElementById("gameDiv").style.display = 'none';
+        document.getElementById("intro").style.display = 'block';
+        document.getElementById("gameOver").style.display = 'none';
     },
 
     create: function() {

@@ -10,7 +10,7 @@ body {
     z-index: -1;
 }
  
-#intro {
+#intro, #gameOver {
     position: relative;
     background-color: #00001a;
     margin-top: 200px; 
@@ -21,16 +21,26 @@ body {
     text-shadow: 2px 2px #117864 ;
 }
 
+#gameOver {
+    margin-top: 250px;
+    font-size: 35px;
+}
+
 #input{
     position: relative;
     left: 100px;
 }
 
-#usernameInput, button{
+#usernameInput, button, #scoreLabel{
     padding: 10px 20px 10px 20px;
     font-family: Verdana, Geneva, Tahoma, sans-serif;
     font-size: 25px;
     font-weight: bold;
     color: #117864 ;
-    
+}
+
+#scoreLabel{
+    text-shadow: none;
+    margin-left: 120px; 
+    font-size: 30px;
 }
