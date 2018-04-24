@@ -10,8 +10,11 @@ var serv = require('http').Server(app);
 app.get('/',function(req, res) {
 	res.sendFile(__dirname + '/client/index.html');
 });
-app.get('/css/style.css',function(req, res) {
+app.get('/css/style.css', function(req, res) {
 	res.sendFile(__dirname + '/client/css/style.css');
+});
+app.get('/assets/explosion.png', function(req, res) {
+	res.sendFile(__dirname + '/assets/explosion.png');
 });
 app.use('/client', express.static(__dirname + '/client'));
 
@@ -21,7 +24,6 @@ console.log("Server started.");
 var player_lst = [];
 var colors = [];
 var backgroundColor = 0x00001a;
-// 0xb3ff66;
 
 //needed for physics update 
 var startTime = (new Date).getTime();
@@ -332,8 +334,7 @@ function onNewplayer (data) {
 	var startingPos = generateStartingPosition();
 	
 	//new player instance
-	var newPlayer = new Player(startingPos.x, startingPos.y, data.username);
-	console.log(newPlayer.username); 	
+	var newPlayer = new Player(startingPos.x, startingPos.y, data.username); 	
 	newPlayer.id = this.id;
 
 	setLandForStarttingPosition(startingPos.x, startingPos.y, newPlayer.id, newPlayer.color, this);
@@ -401,8 +402,17 @@ function onlandPicked(data) {
 		return;
 	}
 
+	if (!nextLand) {
+		var t =  data.ts ? data.ts : this;
+		t.emit("killed", {score: player.score});
+		//provide the new size the enemy will become
+		t.broadcast.emit('remove_player', {id: player.id});
+		playerKilled(player, t);
+		return;
+	}
+
 	checkTailCut(player, data.ts ? data.ts : this);
-	checkOtherTailCut(player, data.ts ? data.ts : this, currentLand);
+	checkOtherTailCut(player, data.ts ? data.ts : this, nextLand);
 
 	currentLand.color = trailColor(data.color);
 	if (player.trail.indexOf(currentLand) === -1) {
@@ -427,7 +437,7 @@ function checkTailCut(player, ts) {
 		ts.emit("killed", {score: player.score});
 		//provide the new size the enemy will become
 		ts.broadcast.emit('remove_player', {id: this.id});
-		playerKilled(player);
+		playerKilled(player, ts);
 	}
 }
 
@@ -448,7 +458,7 @@ function killEnemy (enemyPlayer, ts) {
 	ts.broadcast.to(enemyPlayer.id).emit("killed", {score: enemyPlayer.score}); 
 	//send to everyone except sender.
 	ts.broadcast.emit('remove_player', {id: enemyPlayer.id});
-	playerKilled(enemyPlayer);
+	playerKilled(enemyPlayer, ts);
  
 	sortPlayerListByScore();
 	console.log("someone ate someone!!!");
@@ -460,7 +470,6 @@ function onInputFired (data) {
 	
 	if (!movePlayer || movePlayer.dead) {
 		return;
-		console.log('no player'); 
 	}
 
 	//when sendData is true, we send the data back to client. 
@@ -538,19 +547,19 @@ function onPlayerCollision (data) {
 		return
 
 	//the main player size is less than the enemy size
-	else if (movePlayer.score < enemyPlayer.score) {
+	//else if (movePlayer.score < enemyPlayer.score) {
 		this.emit("killed", {score: movePlayer.score});
 		//provide the new size the enemy will become
 		this.broadcast.emit('remove_player', {id: this.id});
-		playerKilled(movePlayer);
+		playerKilled(movePlayer, this);
 
-	} else {
+	//} else {
 		this.emit('remove_player', {id: enemyPlayer.id}); 
 		this.broadcast.to(data.id).emit("killed", {score: enemyPlayer.score}); 
 		//send to everyone except sender.
 		this.broadcast.emit('remove_player', {id: enemyPlayer.id});
-		playerKilled(enemyPlayer);
-	}
+		playerKilled(enemyPlayer, this);
+	//}
 	
 	sortPlayerListByScore();
 	console.log("someone ate someone!!!");
@@ -572,16 +581,15 @@ function sortPlayerListByScore() {
 		playerListSorted.push({id: player_lst[i].id, name: player_lst[i].username, score: player_lst[i].score});
 	}
 
-	console.log(playerListSorted);
 	io.emit("leader_board", playerListSorted);
 }
 
-function playerKilled (player) {
+function playerKilled (player, ts) {
 	//find the player and remove it.
 	var removePlayer = find_playerid(player.id); 
 		
 	if (removePlayer) {
-		removePlayerLand(player);
+		removePlayerLand(player, ts);
 		player_lst.splice(player_lst.indexOf(removePlayer), 1);
 		var index = colors.indexOf(removePlayer.color);
 		colors.splice(index, 1);
@@ -601,7 +609,7 @@ function onClientdisconnect() {
 	var removePlayer = find_playerid(this.id); 
 		
 	if (removePlayer) {
-		removePlayerLand(removePlayer);
+		removePlayerLand(removePlayer, this);
 		player_lst.splice(player_lst.indexOf(removePlayer), 1);
 		var index = colors.indexOf(removePlayer.color);
 		colors.splice(index, 1);
@@ -614,11 +622,14 @@ function onClientdisconnect() {
 	this.broadcast.emit('remove_player', {id: this.id});
 }
 
-function removePlayerLand (player) {
+function removePlayerLand (player, ts) {
 	game_instance.land.forEach(land => {
 		if(land.owner_id === player.id || land.color === player.trailColor) {
 			land.owner_id = null;
 			land.color = backgroundColor;
+
+			ts.emit("item_update", land); 
+			ts.broadcast.emit("item_update", land); 
 		}
 	});
 }

@@ -45,12 +45,20 @@ function createPlayer (data) {
 
 	// set a fill and line style
 	player.beginFill(data.color);
-	player.lineStyle(2,0xffffff, 1);
+	player.lineStyle(2, 0xffffff, 1);
 	player.drawRect(-data.size/2, -data.size/2, data.size, data.size);
 	player.endFill();
 
 	player.color = data.color;
 	player.type = "player_body"; 
+
+	var style = { font: "16px Arial", fill: "#ffffff", wordWrap: false, align: "center" };
+	
+	text = game.add.text(0, 0, userName, style);
+	text.anchor.set(0.5);
+
+    text.x = Math.floor(data.x + data.size / 2 + 10);
+    text.y = Math.floor(data.y + data.size / 2 + 10);
 
 	// draw a shape
 	game.physics.p2.enableBody(player, false);
@@ -95,11 +103,8 @@ var remote_player = function (id, startx, starty, startSize, color) {
 //Server will tell us when a new enemy player connects to the server.
 //We create a new enemy in our game.
 function onNewPlayer (data) {
-	//enemy object 
-	console.log(data);
 	var new_enemy = new remote_player(data.id, data.x, data.y, data.size, data.color); 
 	enemies.push(new_enemy);
-	console.log(enemies);
 }
 
 //Server tells us there is a new enemy movement. We find the moved enemy
@@ -136,14 +141,26 @@ function onInputRecieved (data) {
 	}
 
 	player.destroy();
+	text.destroy();
 	createPlayer(playerData);
 
 }
 
 function onKilled (data) {
-	player.destroy();
-	console.log('onKilled');
-	game.state.start("gameOver", true, true, {name: userName, score: data.score});
+	setTimeout(() => {
+		var expl = game.add.sprite(player.x, player.y, "explosion");
+		expl.animations.add('explode');
+		expl.animations.play('explode', 10, false);
+		
+		setTimeout(() => {
+			expl.destroy();
+			player.destroy();
+			text.destroy();
+			game.state.start("gameOver", true, true, {name: userName, score: data.score});
+		}, 2000);
+	}, 500);
+
+	
 }
 
 //This is where we use the socket id. 
@@ -216,29 +233,29 @@ function lbupdate (data) {
 main.prototype = {
 	init: function (data) {
 		userName = data.username;
-		socket = io({transports: ['websocket'], upgrade: false});
 	},
 
 	preload: function() {
+		game.load.spritesheet('explosion', 'assets/explosion.png', 256, 128, 12);
+
 		document.getElementById("gameDiv").style.display = 'block';
         document.getElementById("gameOver").style.display = 'none';
 		document.getElementById("intro").style.display = 'none';
+
 		game.stage.disableVisibilityChange = true;
 		game.scale.scaleMode = Phaser.ScaleManager.RESIZE;
 		game.world.setBounds(0, 0, gameProperties.gameWidth, gameProperties.gameHeight, false, false, false, false);
 		game.physics.startSystem(Phaser.Physics.P2JS);
-		game.physics.p2.setBoundsToWorld(false, false, false, false, false)
+		game.physics.p2.setBoundsToWorld(true, true, true, true, false)
 		game.physics.p2.gravity.y = 0;
 		game.physics.p2.applyGravity = false; 
-		game.physics.p2.enableBody(game.physics.p2.walls, false); 
-		// physics start system
-		//game.physics.p2.setImpactEvents(true);
-
+		game.physics.p2.enableBody(game.physics.p2.walls, false);
+		
     },
 	
 	create: function () {
-		game.physics.startSystem(Phaser.Physics.ARCADE);
-		// game.stage.backgroundColor = "#f5fff4";
+		socket = io({transports: ['websocket'], upgrade: false});
+		game.stage.backgroundColor = 0x00001a;
 		
 		console.log("client started");
 		socket.on("connect", onsocketConnected); 
