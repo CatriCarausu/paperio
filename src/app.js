@@ -13,8 +13,8 @@ app.get('/',function(req, res) {
 app.get('/css/style.css', function(req, res) {
 	res.sendFile(__dirname + '/client/css/style.css');
 });
-app.get('/assets/explosion.png', function(req, res) {
-	res.sendFile(__dirname + '/assets/explosion.png');
+app.get('/assets/explosion3.png', function(req, res) {
+	res.sendFile(__dirname + '/assets/explosion3.png');
 });
 app.use('/client', express.static(__dirname + '/client'));
 
@@ -24,6 +24,7 @@ console.log("Server started.");
 var player_lst = [];
 var colors = [];
 var backgroundColor = 0x00001a;
+var borderColor = 0x191930; 
 
 //needed for physics update 
 var startTime = (new Date).getTime();
@@ -60,10 +61,27 @@ function generateLandSquares() {
 	var i, j;
 	var land = [];
 
-	for (i = 15; i < 720; i += 30) {
-		for (j = 15; j < 1275; j += 30) {
+	for (i = 45; i < 705; i += 30) {
+		for (j = 45; j < 1230; j += 30) {
 			var unique_id = unique.v4(); 
 			var land_obj = new land_object(j, i, backgroundColor, null, unique_id);
+			land.push(land_obj);
+		}
+	}
+
+	// borders 
+	for (i = 15; i < 720; i += 30 * 23) {
+		for (j = 15; j < 1275; j += 30) {
+			var unique_id = unique.v4(); 
+			var land_obj = new land_object(j, i, borderColor, 'border', unique_id);
+			land.push(land_obj);
+		}
+	}
+
+	for (j = 15; j < 1275; j += 30 * 41) {
+		for (i = 15; i < 720; i += 30) {
+			var unique_id = unique.v4(); 
+			var land_obj = new land_object(j, i, borderColor, 'border', unique_id);
 			land.push(land_obj);
 		}
 	}
@@ -227,6 +245,10 @@ function specialCase (player, lastLand) {
 }
 
 function completeInsideBorders (borders, player, ts) {
+	if (!borders) {
+		return;
+	}
+	
 	borders.forEach(border => {
 		var capatX = borders.find(b => b.x === border.x && border.id !== b.id);
 		var s, e;
@@ -294,7 +316,7 @@ function generateStartingPosition () {
 					continue;
 				}
 
-				if (land.owner_id !== null) {
+				if (land.owner_id !== null || land.color !== backgroundColor) {
 					available = false;
 				}
 			}
@@ -402,18 +424,6 @@ function onlandPicked(data) {
 		return;
 	}
 
-	if (!nextLand) {
-		var t =  data.ts ? data.ts : this;
-		t.emit("killed", {score: player.score});
-		//provide the new size the enemy will become
-		t.broadcast.emit('remove_player', {id: player.id});
-		playerKilled(player, t);
-		return;
-	}
-
-	checkTailCut(player, data.ts ? data.ts : this);
-	checkOtherTailCut(player, data.ts ? data.ts : this, nextLand);
-
 	currentLand.color = trailColor(data.color);
 	if (player.trail.indexOf(currentLand) === -1) {
 		player.trail.push(currentLand);
@@ -427,9 +437,12 @@ function onlandPicked(data) {
 		this.broadcast.emit("item_update", currentLand);
 	}
 
-	if (nextLand.owner_id === data.player_id) {
+	if (nextLand && nextLand.owner_id === data.player_id) {
 		addLandForPlayer(player, currentLand, data.ts ? data.ts : this);
 	}
+
+	checkTailCut(player, data.ts ? data.ts : this);
+	checkOtherTailCut(player, data.ts ? data.ts : this, nextLand);
 }
 
 function checkTailCut(player, ts) {
@@ -501,6 +514,15 @@ function onInputFired (data) {
 	movePlayer.y = data.pointer_y + yAdd;
 
 	var land = game_instance.land.find(l => l.x === data.pointer_x && l.y === data.pointer_y);
+	var nextLand =  game_instance.land.find(l => l.x === movePlayer.x && l.y === movePlayer.y);
+
+	if (!nextLand || nextLand.color === borderColor) {
+		this.emit("killed", {score: movePlayer.score});
+		//provide the new size the enemy will become
+		this.broadcast.emit('remove_player', {id:  movePlayer.id});
+		playerKilled( movePlayer, this);
+		return;
+	}
 
 	if (land) {
 		onlandPicked({

@@ -36,8 +36,17 @@ function onRemovePlayer (data) {
 		return;
 	}
 	
-	removePlayer.player.destroy();
-	enemies.splice(enemies.indexOf(removePlayer), 1);
+	setTimeout(() => {
+		removePlayer.player.destroy();
+		var explosion = game.add.sprite(removePlayer.x - 256/2, removePlayer.y - 256/2, "explosion");
+		explosion.animations.add('explode');
+		explosion.animations.play('explode', 28, false);
+		enemies.splice(enemies.indexOf(removePlayer), 1);
+		
+		setTimeout(() => {
+			explosion.destroy();
+		}, 1700);
+	}, 150);	
 }
 
 function createPlayer (data) {
@@ -57,8 +66,8 @@ function createPlayer (data) {
 	text = game.add.text(0, 0, userName, style);
 	text.anchor.set(0.5);
 
-    text.x = Math.floor(data.x + data.size / 2 + 10);
-    text.y = Math.floor(data.y + data.size / 2 + 10);
+    text.x = Math.floor(data.x + data.size / 2);
+    text.y = Math.floor(data.y - data.size / 2 - 10);
 
 	// draw a shape
 	game.physics.p2.enableBody(player, false);
@@ -148,19 +157,17 @@ function onInputRecieved (data) {
 
 function onKilled (data) {
 	setTimeout(() => {
-		var expl = game.add.sprite(player.x, player.y, "explosion");
+		text.destroy();
+		player.destroy();
+		var expl = game.add.sprite(player.x - 256/2, player.y - 256/2, "explosion");
 		expl.animations.add('explode');
-		expl.animations.play('explode', 10, false);
+		expl.animations.play('explode', 28, false);
 		
 		setTimeout(() => {
 			expl.destroy();
-			player.destroy();
-			text.destroy();
 			game.state.start("gameOver", true, true, {name: userName, score: data.score});
-		}, 2000);
-	}, 500);
-
-	
+		}, 1700);
+	}, 150);	
 }
 
 //This is where we use the socket id. 
@@ -236,7 +243,7 @@ main.prototype = {
 	},
 
 	preload: function() {
-		game.load.spritesheet('explosion', 'assets/explosion.png', 256, 128, 12);
+		game.load.spritesheet('explosion', 'assets/explosion3.png', 256, 256, 32);
 
 		document.getElementById("gameDiv").style.display = 'block';
         document.getElementById("gameOver").style.display = 'none';
@@ -255,7 +262,7 @@ main.prototype = {
 	
 	create: function () {
 		socket = io({transports: ['websocket'], upgrade: false});
-		game.stage.backgroundColor = 0x00001a;
+		game.stage.backgroundColor = 0x191930; 
 		
 		console.log("client started");
 		socket.on("connect", onsocketConnected); 
