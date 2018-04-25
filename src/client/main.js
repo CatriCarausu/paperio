@@ -165,7 +165,7 @@ function onKilled (data) {
 		
 		setTimeout(() => {
 			expl.destroy();
-			game.state.start("gameOver", true, true, {name: userName, score: data.score});
+			game.state.start("gameOver", true, true, {name: userName, score: data.score, message: 'You lost'});
 		}, 1700);
 	}, 150);	
 }
@@ -230,8 +230,10 @@ function lbupdate (data) {
 			username = temp;
 		}
 		
-		board_string = board_string.concat(i + 1, ". ", username,"   ",(Math.round(data[i].score*100/880*100)/100).toString() + "%\n");
-		
+		board_string = board_string.concat(i + 1, ". ", username,"   ", (data[i].score === 880 ? 100 : Math.round(data[i].score*100/880*100)/100).toString() + "%\n");
+		if (data[i].score === 880) {
+			game.state.start("gameOver", true, true, {name: userName, score: data[i].score, message: 'You won'});
+		}
 	}
 	
 	leader_text.setText("Leaderboard: \n" + board_string); 

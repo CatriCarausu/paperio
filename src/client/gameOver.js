@@ -1,13 +1,13 @@
 var gOver = function(game){
 };
 
-var name;
-var score;
+var name, score, message;
 
 gOver.prototype = {
     init: function (data) {
         name = data.name;
         score = data.score;
+        message = data.message;
     },
 
 	preload: function() {
@@ -18,8 +18,8 @@ gOver.prototype = {
 
     create: function() {
         console.log("game over");
-        document.getElementById("titleGOver").innerHTML = `Game over, ${name} :(`;
-        document.getElementById("scoreLabel").innerHTML = `Your score was: ${score}`;
+        document.getElementById("titleGOver").innerHTML = `${message}, ${name} ${message === "You won" ? '!!!' : ':('}`;
+        document.getElementById("scoreLabel").innerHTML = `Your score was: ${score === 880 ? 100 : Math.round(score*100/880*100)/100}%`;
     },
 
     update: function() {
